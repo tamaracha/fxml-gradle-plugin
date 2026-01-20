@@ -5,7 +5,7 @@ package org.jfxcore.gradle;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.file.Directory;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
@@ -13,51 +13,45 @@ import org.gradle.api.tasks.SourceSetContainer;
 import org.jfxcore.gradle.compiler.CompilerService;
 import org.jfxcore.gradle.tasks.FxmlSourceInfo;
 import org.jfxcore.gradle.tasks.ProcessFxmlTask;
-import java.io.File;
-import java.util.List;
-import java.util.Map;
+
 import java.util.UUID;
 
 public class CompilerPlugin implements Plugin<Project> {
 
     @Override
     public void apply(Project project) {
-        // For each source set, add the corresponding generated sources directory, so it can be
-        // picked up by the Java compiler.
-        SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-
-        project.getGradle().getSharedServices().registerIfAbsent(
-            CompilerService.NAME, CompilerService.class, spec -> {});
-
+        project.getGradle().getSharedServices().registerIfAbsent(CompilerService.NAME, CompilerService.class);
         CompilerService.register(project);
 
-        sourceSets.configureEach(sourceSet -> configureTasksForSourceSet(project, sourceSet));
+        // For each source set, add the corresponding generated sources directory, so it can be
+        // picked up by the Java compiler.
+        project.getPluginManager().withPlugin("java", javaPlugin -> {
+            SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+            sourceSets.configureEach(sourceSet -> configureTasksForSourceSet(project, sourceSet));
+        });
     }
 
     private void configureTasksForSourceSet(Project project, SourceSet sourceSet) {
-        ConfigurableFileCollection searchPath = project.getObjects().fileCollection();
-        searchPath.from(sourceSet.getOutput());
-        searchPath.from(sourceSet.getCompileClasspath());
-
-        FileCollection srcDirs = project.files(sourceSet.getAllSource().getSrcDirs());
-        File classesDir = sourceSet.getJava().getClassesDirectory().get().getAsFile();
-        File genSrcDir = PathHelper.getGeneratedSourcesDir(project, sourceSet);
-        Map<File, List<File>> fxmlFiles = PathHelper.getFxmlFilesPerSourceDirectory(srcDirs.getFiles(), genSrcDir);
-        UUID compilationId = UUID.randomUUID();
+        FileCollection srcDirs = sourceSet.getAllSource().getSourceDirectories();
+        Provider<Directory> genSrcDir = project.getLayout().getBuildDirectory().dir("generated/sources/fxml/java/" + sourceSet.getName());
+        Provider<Directory> classesDir = sourceSet.getJava().getClassesDirectory();
 
         Provider<ProcessFxmlTask> processFxmlTask = project.getTasks().register(
             sourceSet.getTaskName(ProcessFxmlTask.VERB, ProcessFxmlTask.TARGET),
             ProcessFxmlTask.class, task -> {
-                task.getCompilationId().set(compilationId);
-                task.getSearchPath().set(searchPath);
-                task.getCompileClasspath().set(sourceSet.getCompileClasspath());
-                task.getFxmlSourceInfo().set(fxmlFiles.entrySet().stream()
-                    .map(entry -> {
-                        FxmlSourceInfo sourceInfo = project.getObjects().newInstance(FxmlSourceInfo.class);
-                        sourceInfo.getSourceDir().set(entry.getKey());
-                        sourceInfo.getFxmlFiles().set(project.files(entry.getValue()));
-                        return sourceInfo;
-                    }).toList());
+                task.getCompilationId().set(UUID.randomUUID());
+                    task.getSearchPath().from(sourceSet.getOutput());
+                    task.getSearchPath().from(sourceSet.getCompileClasspath());
+                    task.getCompileClasspath().from(sourceSet.getCompileClasspath());
+                    task.getFxmlSourceInfo().set(project.provider(() ->
+                            PathHelper.getFxmlFilesPerSourceDirectory(srcDirs.getFiles(), genSrcDir.get().getAsFile()).entrySet().stream()
+                                    .map(entry -> {
+                                        FxmlSourceInfo sourceInfo = project.getObjects().newInstance(FxmlSourceInfo.class);
+                                        sourceInfo.getSourceDir().set(entry.getKey());
+                                        sourceInfo.getFxmlFiles().setFrom(project.files(entry.getValue()));
+                                        return sourceInfo;
+                                    }).toList()
+                    ));
                 task.getClassesDir().set(classesDir);
                 task.getGeneratedSourcesDir().set(genSrcDir);
             });
