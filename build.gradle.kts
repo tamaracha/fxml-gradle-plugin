@@ -19,11 +19,11 @@ repositories {
 }
 
 dependencies {
-    implementation(gradleApi())
     implementation("org.jfxcore:fxml-compiler:0.12.1")
 
-    testImplementation(platform("org.junit:junit-bom:5.9.2"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
+    // Use JUnit Jupiter for testing.
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {
