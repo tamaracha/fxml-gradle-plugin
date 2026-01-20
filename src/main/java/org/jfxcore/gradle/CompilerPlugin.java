@@ -69,10 +69,13 @@ public class CompilerPlugin implements Plugin<Project> {
         // Run the FXML compiler at the end of compileJava's action list. This is important for
         // incremental compilation: Gradle will fingerprint the compiled class files after the
         // last task action is executed, i.e. after the FXML compiler has rewritten the bytecode.
-        project.getTasks().named(sourceSet.getCompileJavaTaskName(), task -> task.doLast(
-            project.getObjects().newInstance(
-                RunCompilerAction.class, compilationId, searchPath, srcDirs,
-                classesDir, genSrcDir, project.getLogger())));
+        final var action = project.getObjects().newInstance(RunCompilerAction.class, project.getLogger());
+        action.getCompilationId().set(processFxmlTask.flatMap(ProcessFxmlTask::getCompilationId));
+        action.getGenSrcDir().set(processFxmlTask.flatMap(ProcessFxmlTask::getGeneratedSourcesDir));
+        action.getSrcDirs().from(srcDirs);
+        action.getClassesDir().set(processFxmlTask.flatMap(ProcessFxmlTask::getClassesDir));
+        action.getSearchPath().from(processFxmlTask.map(ProcessFxmlTask::getSearchPath));
+        project.getTasks().named(sourceSet.getCompileJavaTaskName(), task -> task.doLast(action));
 
         for (String target : new String[] { "java", "kotlin", "scala", "groovy" }) {
             String compileTaskName = sourceSet.getTaskName("compile", target);

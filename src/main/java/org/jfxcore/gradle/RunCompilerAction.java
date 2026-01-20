@@ -6,6 +6,8 @@ package org.jfxcore.gradle;
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
 import org.gradle.api.Task;
+import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.provider.Property;
@@ -22,35 +24,28 @@ import java.util.List;
 import java.util.UUID;
 
 abstract class RunCompilerAction implements Action<Task> {
+    private final Logger logger;
 
     @ServiceReference(CompilerService.NAME)
     abstract Property<CompilerService> getCompilerService();
-
-    private final UUID compilationId;
-    private final FileCollection searchPath;
-    private final FileCollection srcDirs;
-    private final File classesDir;
-    private final File genSrcDir;
-    private final Logger logger;
+    public abstract Property<UUID> getCompilationId();
+    public abstract ConfigurableFileCollection getSrcDirs();
+    public abstract DirectoryProperty getGenSrcDir();
+    public abstract ConfigurableFileCollection getSearchPath();
+    public abstract DirectoryProperty getClassesDir();
 
     @Inject
-    public RunCompilerAction(
-            UUID compilationId,
-            FileCollection searchPath,
-            FileCollection srcDirs,
-            File classesDir,
-            File genSrcDir,
-            Logger logger) {
-        this.compilationId = compilationId;
-        this.searchPath = searchPath;
-        this.classesDir = classesDir;
-        this.srcDirs = srcDirs;
-        this.genSrcDir = genSrcDir;
+    public RunCompilerAction(Logger logger) {
         this.logger = logger;
     }
 
     @Override
     public void execute(Task task) {
+        final UUID compilationId = getCompilationId().get();
+        final FileCollection searchPath = getSearchPath();
+        final FileCollection srcDirs = getSrcDirs();
+        final File classesDir = getClassesDir().get().getAsFile();
+        final File genSrcDir = getGenSrcDir().get().getAsFile();
         CompilerService compilerService = getCompilerService().get();
         Compiler compiler = null;
 
@@ -87,7 +82,7 @@ abstract class RunCompilerAction implements Action<Task> {
                     }
                 }
 
-                if (recompilableFxmlFilesPerSourceDirectory.size() > 0) {
+                if (!recompilableFxmlFilesPerSourceDirectory.isEmpty()) {
                     compiler = compilerService.newCompiler(compilationId, searchPath, classesDir, genSrcDir, logger);
                     compiler.addFiles(recompilableFxmlFilesPerSourceDirectory);
                     compiler.processFiles();
