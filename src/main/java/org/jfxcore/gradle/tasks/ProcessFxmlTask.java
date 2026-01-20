@@ -5,41 +5,34 @@ package org.jfxcore.gradle.tasks;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
-import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.file.FileCollection;
-import org.gradle.api.provider.ListProperty;
+import org.gradle.api.file.*;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.SetProperty;
 import org.gradle.api.services.ServiceReference;
-import org.gradle.api.tasks.InputFiles;
-import org.gradle.api.tasks.Internal;
-import org.gradle.api.tasks.Nested;
-import org.gradle.api.tasks.OutputDirectory;
-import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.*;
 import org.jfxcore.gradle.compiler.Compiler;
 import org.jfxcore.gradle.compiler.CompilerService;
 import java.io.File;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 public abstract class ProcessFxmlTask extends DefaultTask {
-
-    public static final String VERB = "process";
-    public static final String TARGET = "fxml";
-
     @ServiceReference(CompilerService.NAME)
     protected abstract Property<CompilerService> getCompilerService();
 
-    @Internal
+    @Input
     public abstract Property<UUID> getCompilationId();
 
     @Internal
-    public abstract Property<FileCollection> getSearchPath();
-
-    @InputFiles
-    public abstract Property<FileCollection> getCompileClasspath();
+    public abstract ConfigurableFileCollection getSearchPath();
 
     @Nested
-    public abstract ListProperty<FxmlSourceInfo> getFxmlSourceInfo();
+    public abstract SetProperty<FxmlSourceInfo> getSourceTrees();
+
+    @InputFiles
+    public abstract ConfigurableFileCollection getCompileClasspath();
 
     @OutputDirectory
     public abstract DirectoryProperty getClassesDir();
@@ -50,7 +43,7 @@ public abstract class ProcessFxmlTask extends DefaultTask {
     @TaskAction
     public void process() {
         UUID compilationId = getCompilationId().get();
-        FileCollection searchPath = getSearchPath().get();
+        FileCollection searchPath = getSearchPath();
         File classesDir = getClassesDir().get().getAsFile();
         File genSrcDir = getGeneratedSourcesDir().get().getAsFile();
         CompilerService service = getCompilerService().get();
@@ -58,11 +51,12 @@ public abstract class ProcessFxmlTask extends DefaultTask {
 
         try {
             // Invoke the addFiles and processFiles stages for the source set.
-            // This will generate .java source files that are placed in the generated sources directory.
-            compiler.addFiles(getFxmlSourceInfo().get().stream()
-                    .collect(Collectors.toMap(
-                        x -> x.getSourceDir().get().getAsFile(),
-                        x -> x.getFxmlFiles().get().getFiles().stream().toList())));
+            // This will generate .java source files that are placed in the generated source directory.
+            Map<File, List<File>> info = getSourceTrees().get().stream().collect(Collectors.toMap(
+                    x -> x.getDir().get(),
+                    x -> x.getFiles().get().stream().toList()
+            ));
+            compiler.addFiles(info);
 
             compiler.processFiles();
 

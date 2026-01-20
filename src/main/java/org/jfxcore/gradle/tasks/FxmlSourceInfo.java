@@ -1,21 +1,15 @@
-// Copyright (c) 2025, JFXcore. All rights reserved.
-// Use of this source code is governed by the BSD-3-Clause license that can be found in the LICENSE file.
-
 package org.jfxcore.gradle.tasks;
 
-import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.SetProperty;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
-import org.gradle.api.tasks.Internal;
-import org.gradle.api.tasks.SkipWhenEmpty;
 
-public abstract class FxmlSourceInfo {
+import java.io.File;
 
-    @Internal
-    public abstract DirectoryProperty getSourceDir();
-
+public interface FxmlSourceInfo {
+    @Input
+    Property<File> getDir();
     @InputFiles
-    @SkipWhenEmpty
-    public abstract Property<FileCollection> getFxmlFiles();
+    SetProperty<File> getFiles();
 }

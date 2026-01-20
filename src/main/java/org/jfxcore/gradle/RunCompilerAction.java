@@ -6,51 +6,46 @@ package org.jfxcore.gradle;
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
 import org.gradle.api.Task;
-import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.*;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.SetProperty;
 import org.gradle.api.services.ServiceReference;
+import org.gradle.api.tasks.Nested;
 import org.jfxcore.gradle.compiler.Compiler;
 import org.jfxcore.gradle.compiler.CompilerService;
+import org.jfxcore.gradle.tasks.FxmlSourceInfo;
+
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 abstract class RunCompilerAction implements Action<Task> {
+    private final Logger logger;
 
     @ServiceReference(CompilerService.NAME)
     abstract Property<CompilerService> getCompilerService();
-
-    private final UUID compilationId;
-    private final FileCollection searchPath;
-    private final FileCollection srcDirs;
-    private final File classesDir;
-    private final File genSrcDir;
-    private final Logger logger;
+    public abstract Property<UUID> getCompilationId();
+    @Nested
+    public abstract SetProperty<FxmlSourceInfo> getSourceTrees();
+    public abstract DirectoryProperty getGenSrcDir();
+    public abstract ConfigurableFileCollection getSearchPath();
+    public abstract DirectoryProperty getClassesDir();
 
     @Inject
-    public RunCompilerAction(
-            UUID compilationId,
-            FileCollection searchPath,
-            FileCollection srcDirs,
-            File classesDir,
-            File genSrcDir,
-            Logger logger) {
-        this.compilationId = compilationId;
-        this.searchPath = searchPath;
-        this.classesDir = classesDir;
-        this.srcDirs = srcDirs;
-        this.genSrcDir = genSrcDir;
+    public RunCompilerAction(Logger logger) {
         this.logger = logger;
     }
 
     @Override
     public void execute(Task task) {
+        final UUID compilationId = getCompilationId().get();
+        final FileCollection searchPath = getSearchPath();
+        final File classesDir = getClassesDir().get().getAsFile();
+        final File genSrcDir = getGenSrcDir().get().getAsFile();
         CompilerService compilerService = getCompilerService().get();
         Compiler compiler = null;
 
@@ -70,11 +65,14 @@ abstract class RunCompilerAction implements Action<Task> {
                 // since it includes a custom class file attribute. We invoke the compiler to
                 // give us a list of all FXML class files that don't include the custom attribute,
                 // and recompile only those files.
-                var fxmlFilesPerSourceDirectory = PathHelper.getFxmlFilesPerSourceDirectory(srcDirs.getFiles(), genSrcDir);
-                var recompilableFxmlFilesPerSourceDirectory = new HashMap<File, List<File>>();
+                Map<File, List<File>> recompilableFxmlFilesPerSourceDirectory = new HashMap<>();
 
                 compiler = compilerService.newCompiler(compilationId, searchPath, classesDir, genSrcDir, logger);
-                compiler.addFiles(fxmlFilesPerSourceDirectory);
+                Map<File, List<File>> info = getSourceTrees().get().stream().collect(Collectors.toMap(
+                        x -> x.getDir().get(),
+                        x -> x.getFiles().get().stream().toList()
+                ));
+                compiler.addFiles(info);
 
                 for (var entry : compiler.getCompilationUnits().entrySet()) {
                     for (var compilationUnit :  entry.getValue()) {
@@ -87,7 +85,7 @@ abstract class RunCompilerAction implements Action<Task> {
                     }
                 }
 
-                if (recompilableFxmlFilesPerSourceDirectory.size() > 0) {
+                if (!recompilableFxmlFilesPerSourceDirectory.isEmpty()) {
                     compiler = compilerService.newCompiler(compilationId, searchPath, classesDir, genSrcDir, logger);
                     compiler.addFiles(recompilableFxmlFilesPerSourceDirectory);
                     compiler.processFiles();

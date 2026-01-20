@@ -5,7 +5,6 @@ package org.jfxcore.gradle.compiler;
 
 import org.gradle.api.GradleException;
 import org.gradle.api.logging.Logger;
-import org.jfxcore.gradle.PathHelper;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -120,12 +119,12 @@ public class Compiler implements AutoCloseable {
             for (File sourceFile : sourceFiles) {
                 Path generatedFile = addFile(sourceDir, sourceFile);
                 if (generatedFile != null) {
-                    String fileName = PathHelper.getFileNameWithoutExtension(generatedFile) + ".class";
+                    String fileName = generatedFile.getFileName().toString().replaceAll("\\.[a-z]*$", ".class");
                     Path relFile = generatedSourcesDir.relativize(generatedFile).getParent().resolve(fileName);
                     Path classesDir = this.classesDir.toPath();
                     Path classFile = classesDir.resolve(relFile);
                     Path codeBehindClassFile = classFile.getParent().resolve(
-                        PathHelper.getFileNameWithoutExtension(sourceFile.toPath()) + ".class");
+                            sourceFile.getName().replaceAll("\\.[a-z]*$", ".class") + ".class");
 
                     files.computeIfAbsent(sourceDir, key -> new ArrayList<>()).add(new CompilationUnit(
                         sourceFile, generatedFile.toFile(), classFile.toFile(), codeBehindClassFile.toFile()));
@@ -177,9 +176,6 @@ public class Compiler implements AutoCloseable {
     }
 
     public static final class CompilationUnitCollection extends HashMap<File, List<CompilationUnit>> {
-        public List<File> getJavaFiles() {
-            return values().stream().flatMap(List::stream).map(CompilationUnit::javaFile).toList();
-        }
 
         public List<File> getMarkupClassFiles() {
             return values().stream().flatMap(List::stream).map(CompilationUnit::markupClassFile).toList();
