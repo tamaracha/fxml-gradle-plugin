@@ -5,7 +5,6 @@ package org.jfxcore.gradle;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.Provider;
@@ -26,9 +25,6 @@ public class CompilerPlugin implements Plugin<Project> {
         // For each source set, add the corresponding generated sources directory, so it can be
         // picked up by the Java compiler.
         SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-
-        sourceSets.configureEach(sourceSet ->
-            sourceSet.getJava().srcDir(PathHelper.getGeneratedSourcesDir(project, sourceSet)));
 
         project.getGradle().getSharedServices().registerIfAbsent(
             CompilerService.NAME, CompilerService.class, spec -> {});
@@ -65,6 +61,7 @@ public class CompilerPlugin implements Plugin<Project> {
                 task.getClassesDir().set(classesDir);
                 task.getGeneratedSourcesDir().set(genSrcDir);
             });
+        sourceSet.getJava().srcDir(processFxmlTask.flatMap(ProcessFxmlTask::getGeneratedSourcesDir));
 
         // Run the FXML compiler at the end of compileJava's action list. This is important for
         // incremental compilation: Gradle will fingerprint the compiled class files after the
@@ -76,13 +73,5 @@ public class CompilerPlugin implements Plugin<Project> {
         action.getClassesDir().set(processFxmlTask.flatMap(ProcessFxmlTask::getClassesDir));
         action.getSearchPath().from(processFxmlTask.map(ProcessFxmlTask::getSearchPath));
         project.getTasks().named(sourceSet.getCompileJavaTaskName(), task -> task.doLast(action));
-
-        for (String target : new String[] { "java", "kotlin", "scala", "groovy" }) {
-            String compileTaskName = sourceSet.getTaskName("compile", target);
-            Task compileTask = project.getTasks().findByName(compileTaskName);
-            if (compileTask != null) {
-                compileTask.dependsOn(processFxmlTask);
-            }
-        }
     }
 }
