@@ -5,24 +5,19 @@ package org.jfxcore.gradle.tasks;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
-import org.gradle.api.file.ConfigurableFileCollection;
-import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.file.FileCollection;
-import org.gradle.api.provider.ListProperty;
+import org.gradle.api.file.*;
 import org.gradle.api.provider.Property;
 import org.gradle.api.services.ServiceReference;
 import org.gradle.api.tasks.*;
 import org.jfxcore.gradle.compiler.Compiler;
 import org.jfxcore.gradle.compiler.CompilerService;
 import java.io.File;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 public abstract class ProcessFxmlTask extends DefaultTask {
-
-    public static final String VERB = "process";
-    public static final String TARGET = "fxml";
-
     @ServiceReference(CompilerService.NAME)
     protected abstract Property<CompilerService> getCompilerService();
 
@@ -33,10 +28,9 @@ public abstract class ProcessFxmlTask extends DefaultTask {
     public abstract ConfigurableFileCollection getSearchPath();
 
     @InputFiles
+    public abstract ConfigurableFileCollection getSourceDirectories();
+    @InputFiles
     public abstract ConfigurableFileCollection getCompileClasspath();
-
-    @Nested
-    public abstract ListProperty<FxmlSourceInfo> getFxmlSourceInfo();
 
     @OutputDirectory
     public abstract DirectoryProperty getClassesDir();
@@ -55,11 +49,14 @@ public abstract class ProcessFxmlTask extends DefaultTask {
 
         try {
             // Invoke the addFiles and processFiles stages for the source set.
-            // This will generate .java source files that are placed in the generated sources directory.
-            compiler.addFiles(getFxmlSourceInfo().get().stream()
-                    .collect(Collectors.toMap(
-                        x -> x.getSourceDir().get().getAsFile(),
-                        x -> x.getFxmlFiles().getFiles().stream().toList())));
+            // This will generate .java source files that are placed in the generated source directory.
+            Map<File, List<File>> info = getSourceDirectories().getElements().get().stream()
+                    .filter(x -> x instanceof Directory)
+                            .collect(Collectors.toMap(
+                                    FileSystemLocation::getAsFile,
+                                    x -> ((Directory) x).getAsFileTree().matching(p -> p.include("**/*.fxml", "**/*.fxmlx")).getFiles().stream().toList()
+                            ));
+            compiler.addFiles(info);
 
             compiler.processFiles();
 
