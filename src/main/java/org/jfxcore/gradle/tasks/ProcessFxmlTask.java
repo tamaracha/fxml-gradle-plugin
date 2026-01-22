@@ -7,6 +7,7 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.*;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.SetProperty;
 import org.gradle.api.services.ServiceReference;
 import org.gradle.api.tasks.*;
 import org.jfxcore.gradle.compiler.Compiler;
@@ -27,8 +28,9 @@ public abstract class ProcessFxmlTask extends DefaultTask {
     @Internal
     public abstract ConfigurableFileCollection getSearchPath();
 
-    @InputFiles
-    public abstract ConfigurableFileCollection getSourceDirectories();
+    @Nested
+    public abstract SetProperty<SourceTree> getSourceTrees();
+
     @InputFiles
     public abstract ConfigurableFileCollection getCompileClasspath();
 
@@ -50,12 +52,10 @@ public abstract class ProcessFxmlTask extends DefaultTask {
         try {
             // Invoke the addFiles and processFiles stages for the source set.
             // This will generate .java source files that are placed in the generated source directory.
-            Map<File, List<File>> info = getSourceDirectories().getElements().get().stream()
-                    .filter(x -> x instanceof Directory)
-                            .collect(Collectors.toMap(
-                                    FileSystemLocation::getAsFile,
-                                    x -> ((Directory) x).getAsFileTree().matching(p -> p.include("**/*.fxml", "**/*.fxmlx")).getFiles().stream().toList()
-                            ));
+            Map<File, List<File>> info = getSourceTrees().get().stream().collect(Collectors.toMap(
+                    x -> x.getDir().get(),
+                    x -> x.getFiles().get().stream().toList()
+            ));
             compiler.addFiles(info);
 
             compiler.processFiles();
