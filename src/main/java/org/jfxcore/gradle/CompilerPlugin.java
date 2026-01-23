@@ -33,38 +33,48 @@ public abstract class CompilerPlugin implements Plugin<Project> {
         project.getGradle().getSharedServices().registerIfAbsent(CompilerService.NAME, CompilerService.class);
         CompilerService.register(project);
 
-        // For each source set, add the corresponding generated sources directory, so it can be
-        // picked up by the Java compiler.
+        // React to the Java plugin being applied
         project.getPluginManager().withPlugin("java", javaPlugin -> {
             SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+            // For each source set, add the corresponding generated sources directory, so it can be
+            // picked up by the Java compiler.
             sourceSets.configureEach(sourceSet -> configureTasksForSourceSet(project, sourceSet));
         });
     }
 
     private void configureTasksForSourceSet(Project project, SourceSet sourceSet) {
-        final Directory sourceBase = project.getLayout().getProjectDirectory().dir("src").dir(sourceSet.getName());
-        final String[] includes = new String[] { "**/*.fxml", "**/*.fxmlx" };
-        final TaskProvider<ProcessFxmlTask> processFxmlTask = project.getTasks().register(sourceSet.getTaskName("process", "fxml"), ProcessFxmlTask.class);
-        final SourceDirectorySet java = sourceSet.getJava();
+        // Define and configure a dedicated source directory set for FXML markup files
         final SourceDirectorySet fxml = project.getObjects().sourceDirectorySet("FXML", "FXML Markup Sources");
+        // Add it to the source set, so it is accessible via script DSL
         sourceSet.getExtensions().add("fxml", fxml);
-        for (String target : new String[] { "java", "kotlin", "scala", "groovy" }) {
-            fxml.srcDir(sourceBase.dir(target));
-        }
+        // Define source directories manually. Using `getAllSource` runs into circular dependencies, because we add generated sources to the java source.
+        final Directory sourceBase = project.getLayout().getProjectDirectory().dir("src").dir(sourceSet.getName());
+        fxml.srcDir(sourceBase.dir("java"));
+        // Add plugin-specific source directories if these plugins are applied
+        project.getPluginManager().withPlugin("groovy", plugin -> fxml.srcDir(sourceBase.dir("groovy")));
+        project.getPluginManager().withPlugin("scala", plugin -> fxml.srcDir(sourceBase.dir("scala")));
+        project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", plugin -> fxml.srcDir(sourceBase.dir("kotlin")));
+        // Watch only files with the .fxml or .fxmlx extensions
+        final String[] includes = new String[] { "**/*.fxml", "**/*.fxmlx" };
         fxml.include(includes);
+        // This is where the generated sources go, and this is configurable by users.
         fxml.getDestinationDirectory().convention(project.getLayout().getBuildDirectory().dir("generated/sources/fxml/java/" + sourceSet.getName()));
-        fxml.compiledBy(processFxmlTask, ProcessFxmlTask::getGeneratedSourcesDir);
-        java.srcDir(fxml.getClassesDirectory());
+        // Actually the same as destinationDir, but it depends on the connected tasks, so Java compilation tasks depend on FXML processing tasks
+        sourceSet.getJava().srcDir(fxml.getClassesDirectory());
 
+        // Provides filtered source files structured as needed by the compiler
         final Provider<Set<SourceTree>> sourceTrees = getSourceTrees(fxml.getSourceDirectories(), includes);
-        processFxmlTask.configure(task -> {
+        // Configure the FXML processing task with source set conventions
+        final TaskProvider<ProcessFxmlTask> processFxmlTask = project.getTasks().register(sourceSet.getTaskName("process", "fxml"), ProcessFxmlTask.class, task -> {
                 task.getCompilationId().convention(UUID.randomUUID());
                 task.getSourceTrees().convention(sourceTrees);
                     task.getSearchPath().from(sourceSet.getOutput());
                     task.getSearchPath().from(sourceSet.getCompileClasspath());
             task.getGeneratedSourcesDir().convention(fxml.getDestinationDirectory());
-                task.getClassesDir().convention(java.getDestinationDirectory());
+                task.getClassesDir().convention(sourceSet.getJava().getDestinationDirectory());
             });
+        // Tell the source directory set on which task its outputs depend on
+        fxml.compiledBy(processFxmlTask, ProcessFxmlTask::getGeneratedSourcesDir);
 
         // Run the FXML compiler at the end of compileJava's action list. This is important for
         // incremental compilation: Gradle will fingerprint the compiled class files after the
@@ -73,11 +83,12 @@ public abstract class CompilerPlugin implements Plugin<Project> {
         action.getCompilationId().convention(processFxmlTask.flatMap(ProcessFxmlTask::getCompilationId));
         action.getSourceTrees().convention(sourceTrees);
         action.getGenSrcDir().convention(fxml.getClassesDirectory());
-        action.getClassesDir().convention(java.getClassesDirectory());
+        action.getClassesDir().convention(sourceSet.getJava().getClassesDirectory());
         action.getSearchPath().from(processFxmlTask.map(ProcessFxmlTask::getSearchPath));
         project.getTasks().named(sourceSet.getCompileJavaTaskName(), task -> task.doLast(action));
     }
 
+    /** Returns a set of managed objects, each of them containing a source root directory and corresponding FXML markup files */
     private Provider<Set<SourceTree>> getSourceTrees(FileCollection dirs, String[] includes) {
         return dirs.getElements().map(elements -> {
             return elements.stream()
