@@ -14,7 +14,7 @@ import org.gradle.api.services.ServiceReference;
 import org.gradle.api.tasks.Nested;
 import org.jfxcore.gradle.compiler.Compiler;
 import org.jfxcore.gradle.compiler.CompilerService;
-import org.jfxcore.gradle.tasks.SourceTree;
+import org.jfxcore.gradle.tasks.FxmlSourceInfo;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -30,7 +30,7 @@ abstract class RunCompilerAction implements Action<Task> {
     abstract Property<CompilerService> getCompilerService();
     public abstract Property<UUID> getCompilationId();
     @Nested
-    public abstract SetProperty<SourceTree> getSourceTrees();
+    public abstract SetProperty<FxmlSourceInfo> getSourceTrees();
     public abstract DirectoryProperty getGenSrcDir();
     public abstract ConfigurableFileCollection getSearchPath();
     public abstract DirectoryProperty getClassesDir();

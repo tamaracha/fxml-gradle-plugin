@@ -13,7 +13,7 @@ import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.jfxcore.gradle.compiler.CompilerService;
 import org.jfxcore.gradle.tasks.ProcessFxmlTask;
-import org.jfxcore.gradle.tasks.SourceTree;
+import org.jfxcore.gradle.tasks.FxmlSourceInfo;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -63,7 +63,7 @@ public abstract class CompilerPlugin implements Plugin<Project> {
         sourceSet.getJava().srcDir(fxml.getClassesDirectory());
 
         // Provides filtered source files structured as needed by the compiler
-        final Provider<Set<SourceTree>> sourceTrees = getSourceTrees(fxml.getSourceDirectories(), includes);
+        final Provider<Set<FxmlSourceInfo>> sourceTrees = getSourceTrees(fxml.getSourceDirectories(), includes);
         // Configure the FXML processing task with source set conventions
         final TaskProvider<ProcessFxmlTask> processFxmlTask = project.getTasks().register(sourceSet.getTaskName("process", "fxml"), ProcessFxmlTask.class, task -> {
                 task.getCompilationId().convention(UUID.randomUUID());
@@ -89,7 +89,7 @@ public abstract class CompilerPlugin implements Plugin<Project> {
     }
 
     /** Returns a set of managed objects, each of them containing a source root directory and corresponding FXML markup files */
-    private Provider<Set<SourceTree>> getSourceTrees(FileCollection dirs, String[] includes) {
+    private Provider<Set<FxmlSourceInfo>> getSourceTrees(FileCollection dirs, String[] includes) {
         return dirs.getElements().map(elements -> {
             return elements.stream()
                     .map(FileSystemLocation::getAsFile)
@@ -100,7 +100,7 @@ public abstract class CompilerPlugin implements Plugin<Project> {
                                 .matching(p -> p.include(includes))
                                 .getFiles();
                         if (files.isEmpty()) return null;
-                        final SourceTree config = getObjects().newInstance(SourceTree.class);
+                        final FxmlSourceInfo config = getObjects().newInstance(FxmlSourceInfo.class);
                         config.getDir().set(d);
                         config.getFiles().set(files);
                         return config;

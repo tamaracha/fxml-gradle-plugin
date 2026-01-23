@@ -7,7 +7,7 @@ import org.gradle.api.tasks.InputFiles;
 
 import java.io.File;
 
-public interface SourceTree {
+public interface FxmlSourceInfo {
     @Input
     Property<File> getDir();
     @InputFiles

@@ -29,7 +29,7 @@ public abstract class ProcessFxmlTask extends DefaultTask {
     public abstract ConfigurableFileCollection getSearchPath();
 
     @Nested
-    public abstract SetProperty<SourceTree> getSourceTrees();
+    public abstract SetProperty<FxmlSourceInfo> getSourceTrees();
 
     @InputFiles
     public abstract ConfigurableFileCollection getCompileClasspath();
